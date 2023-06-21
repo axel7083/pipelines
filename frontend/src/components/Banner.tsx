@@ -41,6 +41,9 @@ export const css = stylesheet({
   bannerLeftAlign: {
     marginLeft: 0,
   },
+  bannerRightAlign: {
+    marginLeft: 0,
+  },
   button: {
     color: color.secondaryText,
     maxHeight: '32px',
@@ -76,6 +79,7 @@ export interface BannerProps {
   showTroubleshootingGuideLink?: boolean;
   refresh?: () => void;
   isLeftAlign?: boolean;
+  isRightAlign?: boolean;
 }
 
 interface BannerState {
@@ -101,6 +105,7 @@ class Banner extends React.Component<BannerProps, BannerState> {
     let showTroubleshootingGuideLink = false;
     let showRefreshButton = true;
     let isLeftAlign = this.props.isLeftAlign || false;
+    let isRightAlign = this.props.isRightAlign || false;
 
     switch (this.props.mode) {
       case 'error':
@@ -137,6 +142,7 @@ class Banner extends React.Component<BannerProps, BannerState> {
           commonCss.flex,
           css.banner,
           isLeftAlign && css.bannerLeftAlign,
+          isRightAlign && css.bannerRightAlign,
           bannerModeCss.mode,
         )}
       >

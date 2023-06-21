@@ -82,6 +82,7 @@ interface MlmdPackage {
   events: Event[];
 }
 
+export type {MlmdPackage};
 const metricsTypeToFilter = (metricsType: MetricsType): string => {
   switch (metricsType) {
     case MetricsType.SCALAR_METRICS:
@@ -146,6 +147,8 @@ function filterRunArtifactsByType(
   };
 }
 
+export { filterRunArtifactsByType };
+
 function getRunArtifacts(runs: V2beta1Run[], mlmdPackages: MlmdPackage[]): RunArtifact[] {
   return mlmdPackages.map((mlmdPackage, index) => {
     const events = mlmdPackage.events.filter(e => e.getType() === Event.Type.OUTPUT);
@@ -180,6 +183,8 @@ function getRunArtifacts(runs: V2beta1Run[], mlmdPackages: MlmdPackage[]): RunAr
   });
 }
 
+export { getRunArtifacts };
+
 export interface SelectedArtifact {
   selectedItem: SelectedItem;
   linkedArtifact?: LinkedArtifact;
@@ -190,6 +195,7 @@ interface CompareTableSectionParams {
   compareTableProps?: CompareTableProps;
   dataTypeName: string;
 }
+
 
 function CompareTableSection(props: CompareTableSectionParams) {
   const { isLoading, compareTableProps, dataTypeName } = props;

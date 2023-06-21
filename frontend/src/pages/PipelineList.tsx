@@ -73,6 +73,7 @@ class PipelineList extends Page<{ namespace?: string }, PipelineListState> {
     return {
       actions: buttons
         .newPipelineVersion('Upload pipeline')
+        .newKatibExperiment('New Katib experiment')
         .refresh(this.refresh.bind(this))
         .deletePipelinesAndPipelineVersions(
           () => this.state.selectedIds,

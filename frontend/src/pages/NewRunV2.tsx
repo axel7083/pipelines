@@ -776,6 +776,7 @@ function PipelineSelector(props: PipelineSelectorProps) {
   );
 }
 
+export { PipelineSelector };
 interface PipelineVersionSelectorSpecificProps {
   namespace?: string;
   pipeline: V2beta1Pipeline | undefined;
@@ -886,6 +887,7 @@ function PipelineVersionSelector(props: PipelineVersionSelectorProps) {
   );
 }
 
+export { PipelineVersionSelector };
 interface ExperimentSelectorSpecificProps {
   namespace?: string;
   experimentName: string | undefined;
@@ -1003,3 +1005,4 @@ function ExperimentSelector(props: ExperimentSelectorProps) {
     </>
   );
 }
+export { ExperimentSelector };

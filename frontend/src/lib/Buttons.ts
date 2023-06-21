@@ -38,6 +38,7 @@ export enum ButtonKeys {
   NEW_EXPERIMENT = 'newExperiment',
   NEW_PIPELINE_VERSION = 'newPipelineVersion',
   NEW_RUN = 'newRun',
+  NEW_KATIB = 'newKatib',
   NEW_RECURRING_RUN = 'newRecurringRun',
   NEW_RUN_FROM_PIPELINE_VERSION = 'newRunFromPipelineVersion',
   REFRESH = 'refresh',
@@ -341,6 +342,19 @@ export default class Buttons {
       style: { minWidth: 160 },
       title: label,
       tooltip: 'Upload pipeline version',
+    };
+    return this;
+  }
+
+  public newKatibExperiment(label: string, getPipelineId?: () => string): Buttons {
+    this._map[ButtonKeys.NEW_KATIB] = {
+      action: () => this._createNewKatibExperiment(getPipelineId ? getPipelineId() : ''),
+      icon: AddIcon,
+      id: 'createKatibExperimentBtn',
+      outlined: true,
+      style: { minWidth: 160 },
+      title: label,
+      tooltip: 'Create katib experiment',
     };
     return this;
   }
@@ -762,6 +776,15 @@ export default class Buttons {
         })
       : '';
     this._props.history.push(RoutePage.NEW_PIPELINE_VERSION + searchString);
+  }
+
+  private _createNewKatibExperiment(pipelineId?: string): void {
+    const searchString = pipelineId
+        ? this._urlParser.build({
+          [QUERY_PARAMS.pipelineId]: pipelineId,
+        })
+        : '';
+    this._props.history.push(RoutePage.NEW_KATIB + searchString);
   }
 
   private _dialogDeletePipelinesAndPipelineVersions(

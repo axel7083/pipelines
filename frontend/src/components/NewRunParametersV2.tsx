@@ -69,6 +69,7 @@ const protoMap = new Map<string, string>([
   ['STRUCT', 'dict'],
 ]);
 
+export { protoMap };
 function convertInput(paramStr: string, paramType: ParameterType_ParameterTypeEnum): any {
   // TBD (jlyaoyuli): Currently, empty string is not allowed.
   if (paramStr === '') {

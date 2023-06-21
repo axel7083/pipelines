@@ -52,6 +52,7 @@ import RecurringRunDetailsRouter from 'src/pages/RecurringRunDetailsRouter';
 import SideNav from './SideNav';
 import Toolbar, { ToolbarProps } from './Toolbar';
 import { BuildInfoContext } from 'src/lib/BuildInfo';
+import NewKatibExperiment from "../pages/NewKatibExperiment";
 
 export type RouteConfig = {
   path: string;
@@ -112,6 +113,7 @@ export const RoutePage = {
   NEW_EXPERIMENT: '/experiments/new',
   NEW_PIPELINE_VERSION: '/pipeline_versions/new',
   NEW_RUN: '/runs/new',
+  NEW_KATIB: '/katib/new',
   PIPELINES: '/pipelines',
   PIPELINES_SHARED: '/shared/pipelines',
   PIPELINE_DETAILS: `/pipelines/details/:${RouteParams.pipelineId}/version/:${RouteParams.pipelineVersionId}?`,
@@ -195,6 +197,7 @@ const Router: React.FC<RouterProps> = ({ configs }) => {
     { path: RoutePage.NEW_EXPERIMENT, Component: NewExperiment },
     { path: RoutePage.NEW_PIPELINE_VERSION, Component: NewPipelineVersion },
     { path: RoutePage.NEW_RUN, Component: NewRunSwitcher },
+    { path: RoutePage.NEW_KATIB, Component: NewKatibExperiment },
     {
       path: RoutePage.PIPELINES,
       Component: PrivateAndSharedPipelines,
