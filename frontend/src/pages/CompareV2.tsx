@@ -149,41 +149,45 @@ function filterRunArtifactsByType(
 
 export { filterRunArtifactsByType };
 
-function getRunArtifacts(runs: V2beta1Run[], mlmdPackages: MlmdPackage[]): RunArtifact[] {
-  return mlmdPackages.map((mlmdPackage, index) => {
-    const events = mlmdPackage.events.filter(e => e.getType() === Event.Type.OUTPUT);
+function getRunArtifact(run: V2beta1Run, mlmdPackage: MlmdPackage) {
+  const events = mlmdPackage.events.filter(e => e.getType() === Event.Type.OUTPUT);
 
-    // Match artifacts to executions.
-    const artifactMap = new Map();
-    mlmdPackage.artifacts.forEach(artifact => artifactMap.set(artifact.getId(), artifact));
-    const executionArtifacts = mlmdPackage.executions.map(execution => {
-      const executionEvents = events.filter(e => e.getExecutionId() === execution.getId());
-      const linkedArtifacts: LinkedArtifact[] = [];
-      for (const event of executionEvents) {
-        const artifactId = event.getArtifactId();
-        const artifact = artifactMap.get(artifactId);
-        if (artifact) {
-          linkedArtifacts.push({
-            event,
-            artifact,
-          } as LinkedArtifact);
-        } else {
-          logger.warn(`The artifact with the following ID was not found: ${artifactId}`);
-        }
+  // Match artifacts to executions.
+  const artifactMap = new Map();
+  mlmdPackage.artifacts.forEach(artifact => artifactMap.set(artifact.getId(), artifact));
+  const executionArtifacts = mlmdPackage.executions.map(execution => {
+    const executionEvents = events.filter(e => e.getExecutionId() === execution.getId());
+    const linkedArtifacts: LinkedArtifact[] = [];
+    for (const event of executionEvents) {
+      const artifactId = event.getArtifactId();
+      const artifact = artifactMap.get(artifactId);
+      if (artifact) {
+        linkedArtifacts.push({
+          event,
+          artifact,
+        } as LinkedArtifact);
+      } else {
+        logger.warn(`The artifact with the following ID was not found: ${artifactId}`);
       }
-      return {
-        execution,
-        linkedArtifacts,
-      } as ExecutionArtifact;
-    });
+    }
     return {
-      run: runs[index],
-      executionArtifacts,
-    } as RunArtifact;
+      execution,
+      linkedArtifacts,
+    } as ExecutionArtifact;
   });
+  return {
+    run: run,
+    executionArtifacts,
+  } as RunArtifact;
 }
 
-export { getRunArtifacts };
+export { getRunArtifact };
+
+function getRunArtifacts(runs: V2beta1Run[], mlmdPackages: MlmdPackage[]): RunArtifact[] {
+  return mlmdPackages.map((mlmdPackage, index) => {
+    return getRunArtifact(runs[index], mlmdPackage);
+  });
+}
 
 export interface SelectedArtifact {
   selectedItem: SelectedItem;

@@ -46,7 +46,7 @@ import {ParameterType_ParameterTypeEnum} from "../generated/pipeline_spec/pipeli
 import {protoMap} from "../components/NewRunParametersV2";
 import {Apis, RunSortKeys} from "../lib/Apis";
 import {V2beta1Filter, V2beta1PredicateOperation} from "../apisv2beta1/filter";
-import {V2beta1Run, V2beta1RunStorageState} from "../apisv2beta1/run";
+import {V2beta1Run} from "../apisv2beta1/run";
 import {logger} from "../lib/Utils";
 import {useQuery} from "react-query";
 import {
@@ -56,10 +56,9 @@ import {
     getExecutionsFromContext,
     getKfpV2RunContext
 } from "../mlmd/MlmdUtils";
-import {filterRunArtifactsByType, getRunArtifacts, MlmdPackage} from "./CompareV2";
-import {getScalarTableProps, MetricsType, RunArtifact} from "../lib/v2/CompareUtils";
+import {filterRunArtifactsByType, getRunArtifact, MlmdPackage} from "./CompareV2";
+import {MetricsType, RunArtifact} from "../lib/v2/CompareUtils";
 import {ArtifactType, Value} from "../third_party/mlmd";
-import {CompareTableProps} from "../components/CompareTable";
 import * as jspb from "google-protobuf";
 
 const steps = [
@@ -94,7 +93,12 @@ interface ObjectiveConfig {
     goal: number | undefined
 }
 
-enum ParameterAction {
+interface MetricInfo {
+    display_name: string;
+    parent: string
+}
+
+enum Action {
     ADD = "add",
     DELETE = "delete",
     UPDATE = "update",
@@ -119,7 +123,7 @@ interface ParameterConfig {
 interface StepParametersConfigSpecificProps {
     specParameters: SpecParameters
     parametersConfigs: ParameterConfig[];
-    handleParameterChange: (paramConfig: ParameterConfig, action: ParameterAction) => void;
+    handleParameterChange: (paramConfig: ParameterConfig, action: Action) => void;
     editingParamConfig: ParameterConfig | undefined;
 }
 type StepParametersConfigProps = PageProps & StepParametersConfigSpecificProps;
@@ -127,46 +131,46 @@ type StepParametersConfigProps = PageProps & StepParametersConfigSpecificProps;
 interface ObjectivesProps {
     pipeline: V2beta1Pipeline;
     pipelineVersion: V2beta1PipelineVersion;
-    lastRuns: V2beta1Run[];
+    lastRun: V2beta1Run | undefined;
     objectives: ObjectiveConfig[];
+
+    handleObjectiveChange: (objective: ObjectiveConfig, action: Action) => void;
 }
 
 function Objectives(props: ObjectivesProps) {
 
-    // Scalar Metrics
-    const [scalarMetricsTableData, setScalarMetricsTableData] = useState<
-        CompareTableProps | undefined
-    >(undefined);
+    const [metricsInfo, setMetricsInfo] = useState<MetricInfo[]>([]);
+    const [error, setError] = useState<string | undefined>(undefined);
 
     // Extract runIds
-    const runIds: string[] = props.lastRuns
-        .filter((run) => run.run_id !== undefined)
-        .map((run) => run.run_id!!);
+    const runId: string | undefined = props.lastRun?.run_id;
 
-    // Retrieves MLMD states (executions and linked artifacts) from the MLMD store.
+    // Retrieves MLMD state (executions and linked artifacts) from the MLMD store.
     const {
-        data: mlmdPackages,
+        data: mlmdPackage,
         isLoading: isLoadingMlmdPackages,
-        isError: isErrorMlmdPackages,
-        error: errorMlmdPackages,
-    } = useQuery<MlmdPackage[], Error>(
-        ['run_artifacts', { runIds }],
-        () =>
-            Promise.all(
-                runIds.map(async runId => {
-                    // TODO(zijianjoy): MLMD query is limited to 100 artifacts per run.
-                    // https://github.com/google/ml-metadata/blob/5757f09d3b3ae0833078dbfd2d2d1a63208a9821/ml_metadata/proto/metadata_store.proto#L733-L737
-                    const context = await getKfpV2RunContext(runId);
-                    const executions = await getExecutionsFromContext(context);
-                    const artifacts = await getArtifactsFromContext(context);
-                    const events = await getEventsByExecutions(executions);
-                    return {
-                        executions,
-                        artifacts,
-                        events,
-                    } as MlmdPackage;
-                }),
-            ),
+        isError: isErrorMlmdPackage,
+        error: errorMlmdPackage,
+    } = useQuery<MlmdPackage, Error>(
+        ['run_artifacts', { runId }],
+        async () => {
+            if (runId === undefined)
+                throw Error('The runId is undefined. Cannot fetch V2RunContext')
+
+            const context = await getKfpV2RunContext(runId);
+            console.log('context', context);
+            const executions = await getExecutionsFromContext(context);
+            console.log('executions', executions);
+            const artifacts = await getArtifactsFromContext(context);
+            console.log('artifacts', artifacts);
+            const events = await getEventsByExecutions(executions);
+            console.log('events', events);
+            return {
+                executions,
+                artifacts,
+                events,
+            } as MlmdPackage;
+        },
         {
             staleTime: Infinity,
         },
@@ -182,18 +186,24 @@ function Objectives(props: ObjectivesProps) {
     });
 
     useEffect(() => {
-        if(mlmdPackages === undefined || artifactTypes === undefined)
+        if(props.lastRun === undefined || mlmdPackage === undefined || artifactTypes === undefined)
             return;
 
-        const runArtifacts: RunArtifact[] = getRunArtifacts(props.lastRuns, mlmdPackages);
+        const runArtifact: RunArtifact = getRunArtifact(props.lastRun, mlmdPackage);
         const scalarMetricsArtifactData = filterRunArtifactsByType(
-            runArtifacts,
+            [runArtifact],
             artifactTypes,
             MetricsType.SCALAR_METRICS,
         );
 
+        let metricsInfo: MetricInfo[] = [];
+
+        if (scalarMetricsArtifactData.runArtifacts.length === 0) {
+            setError('Cannot found scalar metrics run artifacts in last experiment run.');
+            return;
+        }
+
         for (const runArtifact of scalarMetricsArtifactData.runArtifacts) {
-            const runName = runArtifact.run.display_name || '-';
             for (const executionArtifact of runArtifact.executionArtifacts) {
                 const executionText: string = getExecutionDisplayName(executionArtifact.execution) || '-';
                 for (const linkedArtifact of executionArtifact.linkedArtifacts) {
@@ -207,29 +217,51 @@ function Objectives(props: ObjectivesProps) {
                         if (scalarMetricName === 'display_name') {
                             continue;
                         }
+                        metricsInfo.push({
+                            parent: metricLabel,
+                            display_name: scalarMetricName,
+                        })
                     }
                 }
             }
         }
 
-        setScalarMetricsTableData(
-            getScalarTableProps(
-                scalarMetricsArtifactData.runArtifacts,
-                scalarMetricsArtifactData.artifactCount,
-            ),
-        );
-    }, [props.lastRuns, mlmdPackages, artifactTypes]);
+        setMetricsInfo(metricsInfo);
+    }, [props.lastRun, mlmdPackage, artifactTypes]);
 
-    if (props.lastRuns.length === 0)
+    useEffect(() => {
+        if (isErrorMlmdPackage) {
+            setError(errorMlmdPackage?.message || 'Something went wrong while fetching MlmdPackages');
+            return;
+        }
+
+        if (isErrorArtifactTypes) {
+            setError(errorArtifactTypes?.message || 'Something went wrong while fetching artifacts types.');
+            return;
+        }
+
+        setError(undefined);
+    }, [isErrorArtifactTypes, errorMlmdPackage, isErrorMlmdPackage, errorArtifactTypes])
+
+    if (isLoadingArtifactTypes || isLoadingMlmdPackages)
         return (
-            <Banner message={'Something went wrong, cannot found last runs for the pipeline.'} mode={'error'}/>
+            <Banner message={'Artifacts are loading.'} mode={'info'}/>
         )
 
     return (
         <div>
             <div className={commonCss.header}>Katib Experiment objective(s)</div>
+            {
+                error && <Banner message={error} mode={'error'}/>
+            }
             <div>
-                {scalarMetricsTableData}
+                {
+                    metricsInfo.map(metric => {
+                        return (
+                            <li>{metric.parent}: {metric.display_name}</li>
+                        )
+                    })
+                }
             </div>
         </div>
     )
@@ -238,7 +270,7 @@ function Objectives(props: ObjectivesProps) {
 
 interface ParametersTableProps {
     parameterConfigs: ParameterConfig[];
-    handleParameterChange: (paramConfig: ParameterConfig, action: ParameterAction) => void;
+    handleParameterChange: (paramConfig: ParameterConfig, action: Action) => void;
 }
 
 function ParametersTable(props: ParametersTableProps) {
@@ -277,11 +309,11 @@ function ParametersTable(props: ParametersTableProps) {
                         <TableCell>{config.parameterType}</TableCell>
                         <TableCell>{renderDomain(config)}</TableCell>
                         <TableCell>
-                            <Button onClick={() => props.handleParameterChange(config, ParameterAction.REQUEST_UPDATE)}>
+                            <Button onClick={() => props.handleParameterChange(config, Action.REQUEST_UPDATE)}>
                                 <EditIcon/>
                             </Button>
                             <Button
-                                onClick={() => props.handleParameterChange(config, ParameterAction.DELETE)}>
+                                onClick={() => props.handleParameterChange(config, Action.DELETE)}>
                                 <DeleteIcon/>
                             </Button>
                         </TableCell>
@@ -320,9 +352,9 @@ function ParametersConfig(props: StepParametersConfigProps) {
 
     useEffect(() => {
         if(!paramSelectorOpen && props.editingParamConfig) {
-            props.handleParameterChange(props.editingParamConfig, ParameterAction.CANCEL_UPDATE);
+            props.handleParameterChange(props.editingParamConfig, Action.CANCEL_UPDATE);
         }
-    }, [paramSelectorOpen]);
+    }, [paramSelectorOpen, props]);
 
     useEffect(() => {
         if(props.editingParamConfig)
@@ -341,7 +373,8 @@ function ParametersConfig(props: StepParametersConfigProps) {
                 setFeasibleSpace('');
                 break;
         }
-    }, [parameterType]);
+    },
+        [parameterType, props.editingParamConfig]);
 
     const handleKeyChange = (value: string) => {
         if (paramKeys.indexOf(value) === -1)
@@ -358,7 +391,7 @@ function ParametersConfig(props: StepParametersConfigProps) {
     }, [dialogFormValid]);
 
     useEffect(() => {
-        if (feasibleSpace === undefined || parameterType === undefined) {
+        if (feasibleSpace === undefined) {
             setDialogFormValid(false);
             return;
         }
@@ -652,7 +685,7 @@ function ParametersConfig(props: StepParametersConfigProps) {
                                     parameterType: parameterType as ParameterType,
                                     feasibleSpace: feasibleSpace as FeasibleSpace
                                 },
-                                (props.editingParamConfig!== undefined)?ParameterAction.UPDATE:ParameterAction.ADD
+                                (props.editingParamConfig!== undefined)?Action.UPDATE:Action.ADD
                             )
                             //TODO: do stuff
                             setParamSelectorOpen(false);
@@ -688,7 +721,7 @@ function ExperimentDetails(props: StepExperimentDetailsProps) {
         setPipelineDisplayName(props.pipeline?.display_name || '');
         setPipelineVersionDisplayName(props.pipelineVersion?.display_name || '');
         setExperimentDisplayName(props.experiment?.display_name || '');
-    }, [props.pipeline, props.pipelineVersion])
+    }, [props.pipeline, props.pipelineVersion, props.experiment])
     return (
         <div>
             <div className={commonCss.header}>Katib Experiment details</div>
@@ -757,11 +790,15 @@ function NewKatibExperiment(props: PageProps) {
 
     /* Required for objectives step */
     const [fetchingLastRuns, setFetchingLastRuns] = useState<boolean>(false);
-    const [lastRuns, setLastRuns] = useState<V2beta1Run[]>([]);
+    const [lastRun, setLastRun] = useState<V2beta1Run | undefined>(undefined);
+    const [objectives, setObjectives] = useState<ObjectiveConfig[]>([]);
 
     /* When the experiment change we fetch the last 5 runs in it */
     useEffect(() => {
         if(experiment === undefined || fetchingLastRuns)
+            return;
+
+        if (lastRun !== undefined && lastRun.experiment_id === experiment.experiment_id)
             return;
 
         setFetchingLastRuns(true);
@@ -769,7 +806,7 @@ function NewKatibExperiment(props: PageProps) {
             namespace,
             experiment.experiment_id,
             undefined /* pageToken */,
-            5 /* pageSize */,
+            1 /* pageSize */,
             RunSortKeys.CREATED_AT + ' desc',
             encodeURIComponent(
                 JSON.stringify({
@@ -783,23 +820,33 @@ function NewKatibExperiment(props: PageProps) {
                 } as V2beta1Filter),
             ),
         ).then((response) => {
-            if (!response.total_size || response.total_size == 0) {
+            if (response.total_size === undefined || response.total_size === 0 || response.runs === undefined) {
                 setError('The experiment provided does not have any runs in it. You need at least one run of the successful pipeline specified in it.');
+                setExperiment(undefined);
                 return;
             }
 
-            const filtered = response.runs?.filter((run) => {
-                return run.pipeline_version_reference?.pipeline_id === pipeline!!.pipeline_id
-                && run.pipeline_version_reference?.pipeline_version_id === pipelineVersion!!.pipeline_version_id
-            });
-
-            if (filtered === undefined || filtered?.length === 0) {
-                setError(`The experiment ${experiment.display_name} does not have any history of the pipeline ${pipeline?.display_name} with version ${pipelineVersion?.display_name}.`)
+            const run = response.runs[0];
+            const version_reference = run.pipeline_version_reference;
+            if (version_reference === undefined) {
+                setError(`The latest run found in ${experiment.display_name} does not have version reference.`);
+                setExperiment(undefined);
                 return;
             }
 
-            setLastRuns(filtered);
+            if (version_reference.pipeline_id !== pipeline!!.pipeline_id) {
+                setError(`The last run in ${experiment.display_name} does not correspond to the pipeline you selected.`);
+                setExperiment(undefined);
+                return;
+            }
 
+            if (version_reference.pipeline_version_id !== pipelineVersion!!.pipeline_version_id) {
+                setError(`The last run in ${experiment.display_name} does not correspond to the pipeline version you selected.`);
+                setExperiment(undefined);
+                return;
+            }
+
+            setLastRun(run);
         }).catch((err) => {
             setError('Failed to load the last 5 runs of this experiment');
             logger.error(
@@ -809,7 +856,7 @@ function NewKatibExperiment(props: PageProps) {
         }).finally(() => {
             setFetchingLastRuns(false);
         });
-    }, [experiment])
+    }, [experiment, fetchingLastRuns, namespace, pipeline, pipelineVersion])
 
     /* The templateString should be V2 otherwise display an error */
     useEffect(() => {
@@ -885,32 +932,52 @@ function NewKatibExperiment(props: PageProps) {
         }
     }
 
-    const handleParameterChange = (paramConfig: ParameterConfig, action: ParameterAction) => {
+    const handleParameterChange = (paramConfig: ParameterConfig, action: Action) => {
         switch (action) {
-            case ParameterAction.ADD:
+            case Action.ADD:
                 setParametersConfigs((prevState) => {
                     return [...prevState, paramConfig];
                 });
                 break;
-            case ParameterAction.DELETE:
+            case Action.DELETE:
                 setParametersConfigs((prevState) => {
                     return prevState.filter((config) => config.key !== paramConfig.key)
                 });
                 break;
-            case ParameterAction.UPDATE:
+            case Action.UPDATE:
                 setParametersConfigs((prevState) => {
                     return [...prevState.filter((config) => config.key !== paramConfig.key), paramConfig]
                 });
                 setEditingParamConfig(undefined);
                 break;
-            case ParameterAction.REQUEST_UPDATE:
+            case Action.REQUEST_UPDATE:
                 setEditingParamConfig(paramConfig);
                 break;
-            case ParameterAction.CANCEL_UPDATE:
+            case Action.CANCEL_UPDATE:
                 setEditingParamConfig(undefined);
                 break;
         }
     }
+
+    const handleObjectiveChange = (objective: ObjectiveConfig, action: Action) => {
+        switch (action) {
+            case Action.ADD:
+                setObjectives((prevState) => {
+                    return [...prevState, objective];
+                })
+                break;
+            case Action.DELETE:
+                break;
+            case Action.UPDATE:
+                break;
+            case Action.REQUEST_UPDATE:
+                break;
+            case Action.CANCEL_UPDATE:
+                break;
+        }
+    }
+
+
 
     const _get_stepper = () => {
         switch (activeStep) {
@@ -941,7 +1008,9 @@ function NewKatibExperiment(props: PageProps) {
                     <Objectives
                         pipeline={pipeline!!}
                         pipelineVersion={pipelineVersion!!}
-                        lastRuns={lastRuns}
+                        lastRun={lastRun}
+                        objectives={objectives}
+                        handleObjectiveChange={handleObjectiveChange}
                     />
                 )
             default:
