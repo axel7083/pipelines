@@ -60,6 +60,7 @@ import {filterRunArtifactsByType, getRunArtifact, MlmdPackage} from "./CompareV2
 import {MetricsType, RunArtifact} from "../lib/v2/CompareUtils";
 import {ArtifactType, Value} from "../third_party/mlmd";
 import * as jspb from "google-protobuf";
+import Separator from "../atoms/Separator";
 
 const steps = [
     { label: 'Experiment Details'},
@@ -80,6 +81,12 @@ const css = stylesheet({
         gap: '8px'
     }
 });
+
+function Advanced() {
+    return (
+        <></>
+    )
+}
 
 interface RangeConfig {
     min: number;
@@ -151,6 +158,7 @@ function ObjectiveForm(props: ObjectiveFormProps) {
         <div>
             <Input
                 label='Parameter name'
+                style={{width: '100%'}}
                 select={true}
                 onChange={(e) => props.handleObjectiveChange({
                     ...props.objective,
@@ -169,6 +177,7 @@ function ObjectiveForm(props: ObjectiveFormProps) {
             {
                 (props.objective.goal !== undefined) && (
                     <Input
+                        style={{width: '100%'}}
                         label='Goal'
                         onChange={(e) => props.handleObjectiveChange({
                             ...props.objective,
@@ -318,15 +327,16 @@ function Objectives(props: ObjectivesProps) {
             <Banner message={'Artifacts are loading.'} mode={'info'}/>
         )
 
+    if (error)
+        return <Banner message={error} mode={'error'}/>
+
     return (
         <div>
             <div className={commonCss.header}>Katib Experiment objective(s)</div>
-            {
-                error && <Banner message={error} mode={'error'}/>
-            }
             <div>
                 <div>Main objective</div>
                 <Input
+                    style={{width: '100%'}}
                     label='Parameter name'
                     select={true}
                     onChange={(e) => handleChangeObjective(e.target.value, true)}
@@ -347,16 +357,20 @@ function Objectives(props: ObjectivesProps) {
                         />
                     )
                 }
+                <Separator/>
                 <div>Additional metrics</div>
                 <Button
                     onClick={() => setAdditionalMetricDialogOpen(true)}
                     color={'primary'}
+                    disabled={(metricsInfo.length < props.additionalObjectives.length + 2)}
                 >
                     <AddIcon/>
                     Add Additional Metric
                 </Button>
                 {
-                    props.additionalObjectives.map((additionalObjective, i) => {
+                    props.additionalObjectives
+                        .sort((a, b) => (a.metric.id.localeCompare(b.metric.id)))
+                        .map((additionalObjective, i) => {
                         return (
                             <Grid style={{display: 'flex', alignItems: 'center'}} key={i} container spacing={8}>
                                 <Grid item xs={7}>
@@ -912,6 +926,7 @@ function ExperimentDetails(props: StepExperimentDetailsProps) {
             <div>You need to select a kubeflow pipeline that will be associate with the katib experiment</div>
             <PipelineSelector
                 {...props}
+                maxWidth={'100%'}
                 pipelineName={pipelineDisplayName}
                 handlePipelineChange={props.handlePipelineChange}
             />
@@ -919,6 +934,7 @@ function ExperimentDetails(props: StepExperimentDetailsProps) {
             {/* Pipeline version selection */}
             <PipelineVersionSelector
                 {...props}
+                maxWidth={'100%'}
                 pipeline={props.pipeline}
                 pipelineVersionName={pipelineVersionDisplayName}
                 handlePipelineVersionChange={props.handlePipelineVersionChange}
@@ -928,6 +944,7 @@ function ExperimentDetails(props: StepExperimentDetailsProps) {
             <div>This katib experiment will be associated with the following experiment</div>
             <ExperimentSelector
                 {...props}
+                maxWidth={'100%'}
                 experimentName={experimentDisplayName}
                 handleExperimentChange={props.handleExperimentChange}
             />
@@ -1067,6 +1084,7 @@ function NewKatibExperiment(props: PageProps) {
     /* Manage the step displayed */
     const handleNext = () => {
         setActiveStep((prevActiveStep) => prevActiveStep + 1);
+        setError(undefined);
     };
     const handleBack = () => {
         setActiveStep((prevActiveStep) => prevActiveStep - 1);
@@ -1147,6 +1165,13 @@ function NewKatibExperiment(props: PageProps) {
         switch (action) {
             case Action.ADD:
                 setObjectives((prevState) => {
+                    // If we update the main objective, we need to ensure to remove other instance of it.
+                    if (objective.goal !== undefined)
+                        return [
+                            ...prevState.filter((_obj) => _obj.metric.id !== objective.metric.id),
+                            objective
+                        ];
+
                     return [...prevState, objective];
                 });
                 break;
@@ -1167,7 +1192,25 @@ function NewKatibExperiment(props: PageProps) {
         }
     }
 
+    const _can_next = (): boolean => {
+        switch (activeStep) {
+            case 0:
+                return pipeline !== undefined && pipelineVersion !== undefined && experiment !== undefined;
+            case 1:
+                // Extract all required parameter for the pipeline
+                const required = Object.entries(specParameters)
+                    .filter((entry) => !entry[1].isOptional)
+                    .map((entry) => entry[0]);
 
+                // Improve perf by using a Set for checking inclusion
+                const configKeys = new Set(parametersConfigs.map((config) => config.key));
+                return required.every((element) => configKeys.has(element));
+            case 2:
+                return objectives.find((obj) => obj.goal !== undefined) !== undefined;
+            default:
+                return false;
+        }
+    }
 
     const _get_stepper = () => {
         switch (activeStep) {
@@ -1204,6 +1247,10 @@ function NewKatibExperiment(props: PageProps) {
                         handleObjectiveChange={handleObjectiveChange}
                     />
                 )
+            case 3:
+                return (
+                    <Advanced/>
+                )
             default:
                 throw new Error('_get_stepper got called with activeStep set to ' + activeStep);
         }
@@ -1225,7 +1272,7 @@ function NewKatibExperiment(props: PageProps) {
                         ))}
                     </Stepper>
                     {
-                        error && <Banner message={error} mode='error' isLeftAlign={true} />
+                        error && <Banner message={error} mode='error' isLeftAlign={true} isRightAlign={true} />
                     }
                     <div key={activeStep}>{
                         _get_stepper()
@@ -1248,12 +1295,7 @@ function NewKatibExperiment(props: PageProps) {
                         }
                         <Button
                             id='nextStepBtn'
-                            disabled={ false
-                                /*experiment === undefined
-                                || pipeline === undefined
-                                || pipelineVersion === undefined
-                                || error === undefined*/
-                            }
+                            disabled={ !_can_next() }
                             onClick={() => handleNext()}
                             color='primary'
                             style={{marginRight: '0px'}}

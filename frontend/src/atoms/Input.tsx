@@ -24,6 +24,8 @@ interface InputProps extends OutlinedTextFieldProps {
   width?: number;
 }
 
+export type { InputProps };
+
 const Input = (props: InputProps) => {
   const { height, maxWidth, variant, width, ...rest } = props;
   return (

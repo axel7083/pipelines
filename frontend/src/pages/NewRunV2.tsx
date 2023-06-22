@@ -34,7 +34,7 @@ import { V2beta1Filter, V2beta1PredicateOperation } from 'src/apisv2beta1/filter
 import BusyButton from 'src/atoms/BusyButton';
 import { ExternalLink } from 'src/atoms/ExternalLink';
 import { HelpButton } from 'src/atoms/HelpButton';
-import Input from 'src/atoms/Input';
+import Input, {InputProps} from 'src/atoms/Input';
 import { CustomRendererProps } from 'src/components/CustomTable';
 import { NameWithTooltip } from 'src/components/CustomTableNameColumn';
 import { Description } from 'src/components/Description';
@@ -725,6 +725,8 @@ interface PipelineSelectorSpecificProps {
   namespace?: string;
   pipelineName: string | undefined;
   handlePipelineChange: (pipeline: V2beta1Pipeline) => void;
+
+  maxWidth?: string
 }
 type PipelineSelectorProps = PageProps & PipelineSelectorSpecificProps;
 
@@ -735,10 +737,11 @@ function PipelineSelector(props: PipelineSelectorProps) {
     <>
       <Input
         value={props.pipelineName}
+        maxWidth={props.maxWidth}
         required={true}
+        variant='outlined'
         label='Pipeline'
         disabled={true}
-        variant='outlined'
         InputProps={{
           classes: { disabled: css.nonEditableInput },
           endAdornment: (
@@ -782,6 +785,7 @@ interface PipelineVersionSelectorSpecificProps {
   pipeline: V2beta1Pipeline | undefined;
   pipelineVersionName: string | undefined;
   handlePipelineVersionChange: (pipelineVersion: V2beta1PipelineVersion) => void;
+  maxWidth?: string;
 }
 type PipelineVersionSelectorProps = PageProps & PipelineVersionSelectorSpecificProps;
 
@@ -793,6 +797,7 @@ function PipelineVersionSelector(props: PipelineVersionSelectorProps) {
     <>
       <Input
         value={props.pipelineVersionName}
+        maxWidth={props.maxWidth}
         required={true}
         label='Pipeline Version'
         disabled={true}
@@ -892,6 +897,7 @@ interface ExperimentSelectorSpecificProps {
   namespace?: string;
   experimentName: string | undefined;
   handleExperimentChange: (experiment: V2beta1Experiment) => void;
+  maxWidth?: string;
 }
 type ExperimentSelectorProps = PageProps & ExperimentSelectorSpecificProps;
 
@@ -904,6 +910,7 @@ function ExperimentSelector(props: ExperimentSelectorProps) {
       <Input
         value={props.experimentName}
         required={true}
+        maxWidth={props.maxWidth}
         label='Experiment'
         disabled={true}
         variant='outlined'
