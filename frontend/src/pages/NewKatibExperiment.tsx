@@ -356,10 +356,10 @@ function Objectives(props: ObjectivesProps) {
                     Add Additional Metric
                 </Button>
                 {
-                    props.additionalObjectives.map((additionalObjective) => {
+                    props.additionalObjectives.map((additionalObjective, i) => {
                         return (
-                            <Grid container spacing={8}>
-                                <Grid item xs={4}>
+                            <Grid style={{display: 'flex', alignItems: 'center'}} key={i} container spacing={8}>
+                                <Grid item xs={7}>
                                     <Input
                                         label='Additional Objective'
                                         onChange={(e) => handleChangeObjective(e.target.value, true)}
@@ -373,6 +373,13 @@ function Objectives(props: ObjectivesProps) {
                                         objective={additionalObjective}
                                         handleObjectiveChange={props.handleObjectiveChange}
                                     />
+                                </Grid>
+                                <Grid item xs={1}>
+                                    <Button onClick={() => {
+                                        props.handleObjectiveChange(additionalObjective, Action.DELETE)
+                                    }}>
+                                        <DeleteIcon/>
+                                    </Button>
                                 </Grid>
                             </Grid>
                         )
@@ -398,7 +405,7 @@ function Objectives(props: ObjectivesProps) {
                         >
                             {metricsInfo.filter((metric) => {
                                 return metric.id !== mainMetricId && props
-                                    .additionalObjectives.find((_obj) => _obj.metric.id !== metric.id);
+                                    .additionalObjectives.find((_obj) => _obj.metric.id === metric.id) === undefined;
                             }).map((metric, i) => (
                                 <MenuItem key={i} value={metric.id}>
                                     {metric.parent}: <strong>{metric.display_name}</strong>
@@ -419,7 +426,18 @@ function Objectives(props: ObjectivesProps) {
                             id='paramDialogValidateBtn'
                             disabled={metricSelectedDialog === undefined}
                             onClick={() => {
-
+                                const metric = metricsInfo.find((metric) =>
+                                    metric.id === metricSelectedDialog
+                                );
+                                if (metric === undefined)
+                                    throw Error('Cannot find metric.');
+                                props.handleObjectiveChange({
+                                    metric:metric,
+                                    type: 'maximize',
+                                    goal: undefined
+                                }, Action.ADD);
+                                setMetricSelectedDialog(undefined);
+                                setAdditionalMetricDialogOpen(false);
                             }}
                             color='primary'
                         >
