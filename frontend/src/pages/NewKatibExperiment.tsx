@@ -87,13 +87,16 @@ interface RangeConfig {
     step: number;
 }
 
+type ObjectiveType = 'maximize' | 'minimize'
+
 interface ObjectiveConfig {
-    type: 'maximize' | 'minimize';
-    metric: string
+    type: ObjectiveType;
+    metric: MetricInfo
     goal: number | undefined
 }
 
 interface MetricInfo {
+    id: string;
     display_name: string;
     parent: string
 }
@@ -132,15 +135,65 @@ interface ObjectivesProps {
     pipeline: V2beta1Pipeline;
     pipelineVersion: V2beta1PipelineVersion;
     lastRun: V2beta1Run | undefined;
-    objectives: ObjectiveConfig[];
+    mainObjective?: ObjectiveConfig;
+    additionalObjectives: ObjectiveConfig[];
 
     handleObjectiveChange: (objective: ObjectiveConfig, action: Action) => void;
 }
 
+interface ObjectiveFormProps {
+    objective: ObjectiveConfig;
+    handleObjectiveChange: (objective: ObjectiveConfig, action: Action) => void;
+}
+
+function ObjectiveForm(props: ObjectiveFormProps) {
+    return (
+        <div>
+            <Input
+                label='Parameter name'
+                select={true}
+                onChange={(e) => props.handleObjectiveChange({
+                    ...props.objective,
+                    type: e.target.value as ObjectiveType,
+                }, Action.UPDATE)}
+                value={props.objective.type}
+                variant='outlined'
+            >
+                <MenuItem value={'maximize'}>
+                    Maximize
+                </MenuItem>
+                <MenuItem value={'minimize'}>
+                    Minimize
+                </MenuItem>
+            </Input>
+            {
+                props.objective.goal && (
+                    <Input
+                        label='Goal'
+                        onChange={(e) => props.handleObjectiveChange({
+                            ...props.objective,
+                            goal: Number(e.target.value)
+                        }, Action.UPDATE)}
+                        value={props.objective.goal}
+                        variant='outlined'
+                    />
+                )
+            }
+
+        </div>
+    )
+}
+
 function Objectives(props: ObjectivesProps) {
+
+    /* Dialog related */
+    const [additionalMetricDialogOpen, setAdditionalMetricDialogOpen] = useState<boolean>(false);
+    const [metricSelectedDialog, setMetricSelectedDialog] = useState<string | undefined>(undefined);
 
     const [metricsInfo, setMetricsInfo] = useState<MetricInfo[]>([]);
     const [error, setError] = useState<string | undefined>(undefined);
+
+    const mainMetricId = props.mainObjective?.metric?.id;
 
     // Extract runIds
     const runId: string | undefined = props.lastRun?.run_id;
@@ -189,6 +242,7 @@ function Objectives(props: ObjectivesProps) {
         if(props.lastRun === undefined || mlmdPackage === undefined || artifactTypes === undefined)
             return;
 
+        // TODO: create a function called "getRunCustomProperties()" to simplify fetching those infos
         const runArtifact: RunArtifact = getRunArtifact(props.lastRun, mlmdPackage);
         const scalarMetricsArtifactData = filterRunArtifactsByType(
             [runArtifact],
@@ -208,7 +262,6 @@ function Objectives(props: ObjectivesProps) {
                 const executionText: string = getExecutionDisplayName(executionArtifact.execution) || '-';
                 for (const linkedArtifact of executionArtifact.linkedArtifacts) {
                     const linkedArtifactText: string = getArtifactName(linkedArtifact) || '-';
-
                     const metricLabel = `${executionText} > ${linkedArtifactText}`;
 
                     const customProperties: jspb.Map<string, Value> = linkedArtifact.artifact.getCustomPropertiesMap();
@@ -220,7 +273,8 @@ function Objectives(props: ObjectivesProps) {
                         metricsInfo.push({
                             parent: metricLabel,
                             display_name: scalarMetricName,
-                        })
+                            id: `${executionText}:${linkedArtifactText}:${scalarMetricName}`
+                        });
                     }
                 }
             }
@@ -241,7 +295,23 @@ function Objectives(props: ObjectivesProps) {
         }
 
         setError(undefined);
-    }, [isErrorArtifactTypes, errorMlmdPackage, isErrorMlmdPackage, errorArtifactTypes])
+    }, [isErrorArtifactTypes, errorMlmdPackage, isErrorMlmdPackage, errorArtifactTypes]);
+
+    const handleChangeObjective = (metric_id: string, isMain: boolean = false) => {
+        const metricInfo = metricsInfo.find((metric) => metric.id === metric_id);
+        if (metricInfo === undefined)
+            throw Error('handleChangeObjective received unknown metric_id.');
+
+        console.log('old mainObjective', props.mainObjective);
+        if (props.mainObjective && isMain)
+            props.handleObjectiveChange(props.mainObjective, Action.DELETE);
+
+        props.handleObjectiveChange({
+            metric: metricInfo,
+            type: 'maximize',
+            goal: isMain?0.99:undefined
+        }, Action.ADD);
+    }
 
     if (isLoadingArtifactTypes || isLoadingMlmdPackages)
         return (
@@ -255,13 +325,108 @@ function Objectives(props: ObjectivesProps) {
                 error && <Banner message={error} mode={'error'}/>
             }
             <div>
+                <div>Main objective</div>
+                <Input
+                    label='Parameter name'
+                    select={true}
+                    onChange={(e) => handleChangeObjective(e.target.value, true)}
+                    value={mainMetricId ?? 'None'}
+                    variant='outlined'
+                >
+                    {metricsInfo.map((metric, i) => (
+                        <MenuItem key={i} value={metric.id}>
+                            {metric.parent}: <strong>{metric.display_name}</strong>
+                        </MenuItem>
+                    ))}
+                </Input>
                 {
-                    metricsInfo.map(metric => {
+                    props.mainObjective && (
+                        <ObjectiveForm
+                            objective={props.mainObjective}
+                            handleObjectiveChange={props.handleObjectiveChange}
+                        />
+                    )
+                }
+                <div>Additional metrics</div>
+                <Button
+                    onClick={() => setAdditionalMetricDialogOpen(true)}
+                    color={'primary'}
+                >
+                    <AddIcon/>
+                    Add Additional Metric
+                </Button>
+                {
+                    props.additionalObjectives.map((additionalObjective) => {
                         return (
-                            <li>{metric.parent}: {metric.display_name}</li>
+                            <Grid container spacing={8}>
+                                <Grid item xs={4}>
+                                    <Input
+                                        label='Additional Objective'
+                                        onChange={(e) => handleChangeObjective(e.target.value, true)}
+                                        value={`${additionalObjective.metric.parent}: ${additionalObjective.metric.display_name}`}
+                                        disabled={true}
+                                        variant='outlined'
+                                    />
+                                </Grid>
+                                <Grid item xs={4}>
+                                    <ObjectiveForm
+                                        objective={additionalObjective}
+                                        handleObjectiveChange={props.handleObjectiveChange}
+                                    />
+                                </Grid>
+                            </Grid>
                         )
                     })
                 }
+                <Dialog
+                    open={additionalMetricDialogOpen}
+                    classes={{ paper: css.selectorDialog }}
+                    onClose={() => {
+                        setAdditionalMetricDialogOpen(false)
+                    }}
+                    PaperProps={{ id: 'experimentSelectorDialog' }}
+                >
+                    <DialogTitle>Choose an additional metric</DialogTitle>
+                    <DialogContent>
+                        <div>Configure the new parameter that will be added to the list.</div>
+                        <Input
+                            label='Parameter name'
+                            select={true}
+                            onChange={(e) => setMetricSelectedDialog(e.target.value)}
+                            value={metricSelectedDialog ?? 'None'}
+                            variant='outlined'
+                        >
+                            {metricsInfo.filter((metric) => {
+                                return metric.id !== mainMetricId && props
+                                    .additionalObjectives.find((_obj) => _obj.metric.id !== metric.id);
+                            }).map((metric, i) => (
+                                <MenuItem key={i} value={metric.id}>
+                                    {metric.parent}: <strong>{metric.display_name}</strong>
+                                </MenuItem>
+                            ))}
+                        </Input>
+
+                    </DialogContent>
+                    <DialogActions>
+                        <Button
+                            id='paramDialogCancelBtn'
+                            onClick={() => setAdditionalMetricDialogOpen(false)}
+                            color='secondary'
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            id='paramDialogValidateBtn'
+                            disabled={metricSelectedDialog === undefined}
+                            onClick={() => {
+
+                            }}
+                            color='primary'
+                        >
+                            Validate
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             </div>
         </div>
     )
@@ -960,15 +1125,22 @@ function NewKatibExperiment(props: PageProps) {
     }
 
     const handleObjectiveChange = (objective: ObjectiveConfig, action: Action) => {
+        console.log('handleObjectiveChange', objective, action);
         switch (action) {
             case Action.ADD:
                 setObjectives((prevState) => {
                     return [...prevState, objective];
-                })
+                });
                 break;
             case Action.DELETE:
+                setObjectives((prevState) => {
+                    return prevState.filter((_objective) => _objective.metric.id !== objective.metric.id);
+                });
                 break;
             case Action.UPDATE:
+                setObjectives((prevState) => {
+                    return [...prevState.filter((_objective) => _objective.metric.id !== objective.metric.id), objective]
+                });
                 break;
             case Action.REQUEST_UPDATE:
                 break;
@@ -1009,7 +1181,8 @@ function NewKatibExperiment(props: PageProps) {
                         pipeline={pipeline!!}
                         pipelineVersion={pipelineVersion!!}
                         lastRun={lastRun}
-                        objectives={objectives}
+                        mainObjective={objectives.find((obj) => obj.goal !== undefined)}
+                        additionalObjectives={objectives.filter((obj) => obj.goal === undefined)}
                         handleObjectiveChange={handleObjectiveChange}
                     />
                 )
