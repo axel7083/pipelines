@@ -167,7 +167,7 @@ function ObjectiveForm(props: ObjectiveFormProps) {
                 </MenuItem>
             </Input>
             {
-                props.objective.goal && (
+                (props.objective.goal !== undefined) && (
                     <Input
                         label='Goal'
                         onChange={(e) => props.handleObjectiveChange({
